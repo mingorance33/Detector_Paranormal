@@ -3,18 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GhostCam Fix - Netlify</title>
+    <title>GhostCam Pro - Sistema de Vigilancia</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { background: #000; color: #0f0; font-family: monospace; text-align: center; padding: 20px; }
-        video { width: 100%; max-width: 600px; border: 2px solid #0f0; background: #222; margin-top: 10px; }
-        .btn { background: #0f0; color: #000; padding: 15px; border: none; font-weight: bold; width: 100%; max-width: 300px; margin: 10px auto; display: block; }
-        #log { font-size: 0.8em; color: #888; margin-top: 20px; }
+        body { 
+            background: #000; 
+            color: #0f0; 
+            font-family: 'Courier New', monospace; 
+            text-align: center; 
+            padding: 20px;
+            margin: 0;
+        }
+        h1 { font-size: 1.5rem; letter-spacing: 2px; text-shadow: 0 0 10px #0f0; }
+        video { 
+            width: 100%; 
+            max-width: 640px; 
+            border: 1px solid #0f0; 
+            background: #111; 
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+            margin-top: 15px;
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+        .btn { 
+            background: #0f0; 
+            color: #000; 
+            padding: 15px 25px; 
+            border: none; 
+            font-weight: bold; 
+            cursor: pointer;
+            width: 250px;
+            text-transform: uppercase;
+        }
+        .btn:active { background: #0a0; }
+        .btn-danger { background: #ff0000; color: white; }
+        #status { color: yellow; margin: 15px 0; font-size: 0.9rem; }
+        #log { 
+            text-align: left; 
+            font-size: 0.7rem; 
+            color: #666; 
+            max-width: 500px; 
+            margin: 20px auto; 
+            height: 100px; 
+            overflow-y: auto;
+            border-top: 1px solid #333;
+            padding-top: 10px;
+        }
+        #peer-id-display { 
+            color: #fff; 
+            background: #222; 
+            padding: 10px; 
+            word-break: break-all;
+            border: 1px dashed #0f0;
+        }
     </style>
 </head>
 <body>
-    <h1>🧿 GHOST-CAM PRO</h1>
-    <div id="status">🔵 Estado: Esperando...</div>
+
+    <h1>🧿 GHOST-CAM P2P</h1>
+    <div id="status">INICIALIZANDO SENSORES...</div>
     
     <div id="setup">
         <button class="btn" onclick="iniciarComoCamera()">MODO VIGILANTE (Enviar)</button>
@@ -23,31 +75,44 @@
 
     <div id="display" style="display:none;">
         <video id="remoteVideo" autoplay playsinline muted></video>
-        <p id="peer-id-display" style="word-break: break-all; font-weight: bold; color: yellow;"></p>
-        <button class="btn" style="background: red; color: white;" onclick="location.reload()">CORTAR CONEXIÓN</button>
+        <div id="info-conexion" style="margin-top: 15px;">
+            <p id="label-id">Tu ID de conexión:</p>
+            <p id="peer-id-display">Generando ID...</p>
+        </div>
+        <button class="btn btn-danger" onclick="location.reload()">CORTAR SEÑAL</button>
     </div>
 
     <div id="log"></div>
 
     <script>
+        const statusDiv = document.getElementById('status');
         const logDiv = document.getElementById('log');
-        function writeLog(msg) { logDiv.innerHTML += `> ${msg}<br>`; }
+        const videoElement = document.getElementById('remoteVideo');
 
-        const peer = new Peer(); 
+        function writeLog(msg) {
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${time}] ${msg}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // Crear instancia de PeerJS
+        const peer = new Peer();
 
         peer.on('open', (id) => {
-            document.getElementById('status').innerText = "🟢 Sistema Listo";
-            writeLog("Tu ID es: " + id);
+            statusDiv.innerText = "🟢 SISTEMA ONLINE";
+            writeLog("ID de red generado correctamente.");
         });
 
         peer.on('error', (err) => {
+            statusDiv.innerText = "🔴 ERROR DE RED";
             writeLog("Error: " + err.type);
-            console.error(err);
         });
 
+        // --- LÓGICA DEL VIGILANTE (EL QUE ENVÍA) ---
         async function iniciarComoCamera() {
-            writeLog("Iniciando cámara...");
+            writeLog("Solicitando acceso a cámara...");
             try {
+                // Pedimos cámara trasera en móviles y audio
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: "environment" }, 
                     audio: true 
@@ -55,39 +120,67 @@
                 
                 document.getElementById('setup').style.display = 'none';
                 document.getElementById('display').style.display = 'block';
-                document.getElementById('peer-id-display').innerText = "ID CÁMARA: " + peer.id;
+                document.getElementById('peer-id-display').innerText = peer.id;
                 
-                const video = document.getElementById('remoteVideo');
-                video.srcObject = stream;
+                videoElement.srcObject = stream;
+                writeLog("Emitiendo video local.");
 
+                // Cuando el monitor nos llame, enviamos nuestro stream
                 peer.on('call', (call) => {
-                    writeLog("Recibiendo llamada del monitor...");
+                    writeLog("¡Monitor detectado! Enviando señal...");
                     call.answer(stream);
                 });
+
             } catch (err) {
-                writeLog("Error acceso cámara: " + err.message);
+                statusDiv.innerText = "❌ ERROR DE ACCESO";
+                writeLog("No se pudo acceder a la cámara: " + err.message);
             }
         }
 
+        // --- LÓGICA DEL MONITOR (EL QUE VE) ---
         function iniciarComoMonitor() {
-            const idCamara = prompt("Pega aquí el ID de la cámara:");
+            const idCamara = prompt("Introduce el ID del Vigilante:");
             if (!idCamara) return;
 
             document.getElementById('setup').style.display = 'none';
             document.getElementById('display').style.display = 'block';
+            document.getElementById('label-id').innerText = "Conectado a:";
+            document.getElementById('peer-id-display').innerText = idCamara;
             
-            writeLog("Llamando a la cámara...");
+            writeLog("Llamando al vigilante...");
+            
+            // Llamamos al ID introducido
             const call = peer.call(idCamara, null);
             
             call.on('stream', (remoteStream) => {
-                writeLog("¡Señal recibida!");
-                const video = document.getElementById('remoteVideo');
-                video.srcObject = remoteStream;
-                // Importante: Intentar quitar el mute después de que el usuario interactúe
-                video.muted = false; 
-                video.play();
+                writeLog("Señal recibida. Cargando buffer...");
+                
+                videoElement.srcObject = remoteStream;
+                
+                // Forzar reproducción para iOS/Safari
+                videoElement.play().then(() => {
+                    writeLog("Video en vivo.");
+                    // Una vez que el video corre, intentamos quitar el mute
+                    videoElement.muted = false;
+                }).catch(err => {
+                    writeLog("Reproducción bloqueada. TOCA EL VIDEO.");
+                    statusDiv.innerText = "⚠️ TOCA EL VIDEO PARA ACTIVAR";
+                });
+            });
+
+            call.on('close', () => {
+                writeLog("La cámara ha cerrado la conexión.");
+                alert("Conexión perdida.");
+                location.reload();
             });
         }
+
+        // Truco para iOS: Activar sonido al tocar el video
+        videoElement.addEventListener('click', () => {
+            videoElement.muted = false;
+            statusDiv.innerText = "🔊 AUDIO ACTIVADO";
+        });
+
     </script>
 </body>
 </html>
