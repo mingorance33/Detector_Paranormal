@@ -3,75 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GhostCam P2P - Netlify</title>
+    <title>GhostCam Fix - Netlify</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { background: #000; color: #0f0; font-family: 'Courier New', monospace; text-align: center; }
-        video { width: 90%; max-width: 500px; border: 1px solid #0f0; border-radius: 8px; }
-        .btn { background: #0f0; color: #000; padding: 15px; border: none; cursor: pointer; margin: 10px; font-weight: bold; }
-        #status { color: yellow; margin: 10px; }
+        body { background: #000; color: #0f0; font-family: monospace; text-align: center; padding: 20px; }
+        video { width: 100%; max-width: 600px; border: 2px solid #0f0; background: #222; margin-top: 10px; }
+        .btn { background: #0f0; color: #000; padding: 15px; border: none; font-weight: bold; width: 100%; max-width: 300px; margin: 10px auto; display: block; }
+        #log { font-size: 0.8em; color: #888; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <h1>🧿 GHOST-CAM REMOTE</h1>
-    <div id="status">Cargando sistema...</div>
+    <h1>🧿 GHOST-CAM PRO</h1>
+    <div id="status">🔵 Estado: Esperando...</div>
     
     <div id="setup">
-        <button class="btn" onclick="iniciarComoCamera()">MODO CÁMARA (Vigilante)</button>
-        <button class="btn" onclick="iniciarComoMonitor()">MODO MONITOR (Observador)</button>
+        <button class="btn" onclick="iniciarComoCamera()">MODO VIGILANTE (Enviar)</button>
+        <button class="btn" onclick="iniciarComoMonitor()">MODO MONITOR (Ver)</button>
     </div>
 
     <div id="display" style="display:none;">
-        <h3 id="role-title"></h3>
-        <video id="remoteVideo" autoplay playsinline></video>
-        <p id="peer-id-display"></p>
+        <video id="remoteVideo" autoplay playsinline muted></video>
+        <p id="peer-id-display" style="word-break: break-all; font-weight: bold; color: yellow;"></p>
+        <button class="btn" style="background: red; color: white;" onclick="location.reload()">CORTAR CONEXIÓN</button>
     </div>
 
+    <div id="log"></div>
+
     <script>
-        const peer = new Peer(); // Crea un ID único automático
-        let myId = "";
+        const logDiv = document.getElementById('log');
+        function writeLog(msg) { logDiv.innerHTML += `> ${msg}<br>`; }
+
+        const peer = new Peer(); 
 
         peer.on('open', (id) => {
-            myId = id;
-            document.getElementById('status').innerText = "Sistema Listo.";
+            document.getElementById('status').innerText = "🟢 Sistema Listo";
+            writeLog("Tu ID es: " + id);
         });
 
-        // --- MODO CÁMARA ---
-        function iniciarComoCamera() {
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('display').style.display = 'block';
-            document.getElementById('role-title').innerText = "EMITIENDO SEÑAL...";
-            document.getElementById('peer-id-display').innerText = "ID de conexión: " + myId;
-            
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true })
-                .then(stream => {
-                    const video = document.getElementById('remoteVideo');
-                    video.srcObject = stream;
-                    video.muted = true;
+        peer.on('error', (err) => {
+            writeLog("Error: " + err.type);
+            console.error(err);
+        });
 
-                    // Esperar a que el monitor llame
-                    peer.on('call', (call) => {
-                        call.answer(stream);
-                        document.getElementById('status').innerText = "¡MONITOR CONECTADO!";
-                    });
+        async function iniciarComoCamera() {
+            writeLog("Iniciando cámara...");
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" }, 
+                    audio: true 
                 });
+                
+                document.getElementById('setup').style.display = 'none';
+                document.getElementById('display').style.display = 'block';
+                document.getElementById('peer-id-display').innerText = "ID CÁMARA: " + peer.id;
+                
+                const video = document.getElementById('remoteVideo');
+                video.srcObject = stream;
+
+                peer.on('call', (call) => {
+                    writeLog("Recibiendo llamada del monitor...");
+                    call.answer(stream);
+                });
+            } catch (err) {
+                writeLog("Error acceso cámara: " + err.message);
+            }
         }
 
-        // --- MODO MONITOR ---
         function iniciarComoMonitor() {
-            const idCamara = prompt("Introduce el ID de la Cámara:");
+            const idCamara = prompt("Pega aquí el ID de la cámara:");
             if (!idCamara) return;
 
             document.getElementById('setup').style.display = 'none';
             document.getElementById('display').style.display = 'block';
-            document.getElementById('role-title').innerText = "RECIBIENDO SEÑAL...";
-
-            const call = peer.call(idCamara, null); // Llamar a la cámara sin enviar nuestro video
+            
+            writeLog("Llamando a la cámara...");
+            const call = peer.call(idCamara, null);
             
             call.on('stream', (remoteStream) => {
+                writeLog("¡Señal recibida!");
                 const video = document.getElementById('remoteVideo');
                 video.srcObject = remoteStream;
-                document.getElementById('status').innerText = "RECIBIENDO VIDEO EN VIVO";
+                // Importante: Intentar quitar el mute después de que el usuario interactúe
+                video.muted = false; 
+                video.play();
             });
         }
     </script>
