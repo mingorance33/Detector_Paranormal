@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Detector Paranormal - Netlify</title>
+    <style>
+        body { background: #1a1a1a; color: #00ff00; font-family: monospace; text-align: center; }
+        video, canvas { max-width: 90%; border: 2px solid #333; }
+        #log { height: 150px; overflow-y: scroll; background: #000; margin: 20px; padding: 10px; border: 1px solid #00ff00; }
+        .alert { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🧿 DETECTOR DE MOVIMIENTO V1.0</h1>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+    
+    <div id="status">Estado: Calibrando sensores...</div>
+    <div id="log">--- LOG DE ACTIVIDAD PARANORMAL ---<br></div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const log = document.getElementById('log');
+        let prevFrame = null;
+
+        // Acceder a la cámara
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => console.error("Error en cámara: ", err));
+
+        function detect() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+            if (prevFrame) {
+                let diff = 0;
+                // Comparar cada 4 píxeles para ahorrar procesador
+                for (let i = 0; i < currentFrame.data.length; i += 4) {
+                    const rDiff = Math.abs(currentFrame.data[i] - prevFrame.data[i]);
+                    const gDiff = Math.abs(currentFrame.data[i+1] - prevFrame.data[i+1]);
+                    const bDiff = Math.abs(currentFrame.data[i+2] - prevFrame.data[i+2]);
+                    if (rDiff + gDiff + bDiff > 100) diff++;
+                }
+
+                // Umbral de movimiento
+                if (diff > 500) {
+                    const time = new Date().toLocaleTimeString();
+                    log.innerHTML += `<span class="alert">[${time}] MOVIMIENTO DETECTADO - NIVEL: ${diff}</span><br>`;
+                    log.scrollTop = log.scrollHeight;
+                }
+            }
+            prevFrame = currentFrame;
+            requestAnimationFrame(detect);
+        }
+
+        video.onplay = () => {
+            document.getElementById('status').innerText = "SISTEMA ACTIVO: Vigilando entorno...";
+            detect();
+        };
+    </script>
+</body>
+</html>
