@@ -2,66 +2,78 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Detector Paranormal - Netlify</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostCam P2P - Netlify</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { background: #1a1a1a; color: #00ff00; font-family: monospace; text-align: center; }
-        video, canvas { max-width: 90%; border: 2px solid #333; }
-        #log { height: 150px; overflow-y: scroll; background: #000; margin: 20px; padding: 10px; border: 1px solid #00ff00; }
-        .alert { color: red; font-weight: bold; }
+        body { background: #000; color: #0f0; font-family: 'Courier New', monospace; text-align: center; }
+        video { width: 90%; max-width: 500px; border: 1px solid #0f0; border-radius: 8px; }
+        .btn { background: #0f0; color: #000; padding: 15px; border: none; cursor: pointer; margin: 10px; font-weight: bold; }
+        #status { color: yellow; margin: 10px; }
     </style>
 </head>
 <body>
-    <h1>🧿 DETECTOR DE MOVIMIENTO V1.0</h1>
-    <video id="video" autoplay playsinline></video>
-    <canvas id="canvas" style="display:none;"></canvas>
+    <h1>🧿 GHOST-CAM REMOTE</h1>
+    <div id="status">Cargando sistema...</div>
     
-    <div id="status">Estado: Calibrando sensores...</div>
-    <div id="log">--- LOG DE ACTIVIDAD PARANORMAL ---<br></div>
+    <div id="setup">
+        <button class="btn" onclick="iniciarComoCamera()">MODO CÁMARA (Vigilante)</button>
+        <button class="btn" onclick="iniciarComoMonitor()">MODO MONITOR (Observador)</button>
+    </div>
+
+    <div id="display" style="display:none;">
+        <h3 id="role-title"></h3>
+        <video id="remoteVideo" autoplay playsinline></video>
+        <p id="peer-id-display"></p>
+    </div>
 
     <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const log = document.getElementById('log');
-        let prevFrame = null;
+        const peer = new Peer(); // Crea un ID único automático
+        let myId = "";
 
-        // Acceder a la cámara
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => { video.srcObject = stream; })
-            .catch(err => console.error("Error en cámara: ", err));
+        peer.on('open', (id) => {
+            myId = id;
+            document.getElementById('status').innerText = "Sistema Listo.";
+        });
 
-        function detect() {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // --- MODO CÁMARA ---
+        function iniciarComoCamera() {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('display').style.display = 'block';
+            document.getElementById('role-title').innerText = "EMITIENDO SEÑAL...";
+            document.getElementById('peer-id-display').innerText = "ID de conexión: " + myId;
             
-            const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            
-            if (prevFrame) {
-                let diff = 0;
-                // Comparar cada 4 píxeles para ahorrar procesador
-                for (let i = 0; i < currentFrame.data.length; i += 4) {
-                    const rDiff = Math.abs(currentFrame.data[i] - prevFrame.data[i]);
-                    const gDiff = Math.abs(currentFrame.data[i+1] - prevFrame.data[i+1]);
-                    const bDiff = Math.abs(currentFrame.data[i+2] - prevFrame.data[i+2]);
-                    if (rDiff + gDiff + bDiff > 100) diff++;
-                }
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true })
+                .then(stream => {
+                    const video = document.getElementById('remoteVideo');
+                    video.srcObject = stream;
+                    video.muted = true;
 
-                // Umbral de movimiento
-                if (diff > 500) {
-                    const time = new Date().toLocaleTimeString();
-                    log.innerHTML += `<span class="alert">[${time}] MOVIMIENTO DETECTADO - NIVEL: ${diff}</span><br>`;
-                    log.scrollTop = log.scrollHeight;
-                }
-            }
-            prevFrame = currentFrame;
-            requestAnimationFrame(detect);
+                    // Esperar a que el monitor llame
+                    peer.on('call', (call) => {
+                        call.answer(stream);
+                        document.getElementById('status').innerText = "¡MONITOR CONECTADO!";
+                    });
+                });
         }
 
-        video.onplay = () => {
-            document.getElementById('status').innerText = "SISTEMA ACTIVO: Vigilando entorno...";
-            detect();
-        };
+        // --- MODO MONITOR ---
+        function iniciarComoMonitor() {
+            const idCamara = prompt("Introduce el ID de la Cámara:");
+            if (!idCamara) return;
+
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('display').style.display = 'block';
+            document.getElementById('role-title').innerText = "RECIBIENDO SEÑAL...";
+
+            const call = peer.call(idCamara, null); // Llamar a la cámara sin enviar nuestro video
+            
+            call.on('stream', (remoteStream) => {
+                const video = document.getElementById('remoteVideo');
+                video.srcObject = remoteStream;
+                document.getElementById('status').innerText = "RECIBIENDO VIDEO EN VIVO";
+            });
+        }
     </script>
 </body>
 </html>
